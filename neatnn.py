@@ -12,13 +12,13 @@ class Population:
     genomes = []
     species = []
     innovation = 0
-
     innovations = []
     
     def __init__(self, populationSize, numInputs = 0, numOutputs = 0, speciationTreshold = 0.2):
         self.speciationTreshold = speciationTreshold
         for i in range(populationSize):
             self.genomes.append(Genome(self,numInputs, numOutputs))
+
     def addInnovation(self, inNodeID, outNodeID):
         for innov in self.innovations:
             if inNodeID==innov.inNodeID and outNodeID==innov.outNodeID:
@@ -26,6 +26,12 @@ class Population:
         self.innovation+=1
         self.innovations.append(Innovation(self.innovation, inNodeID, outNodeID))
         return -1
+
+class Entity:
+
+    def __init__(self, genome):
+        
+
 class Innovation:
     def __init__(self, num, inNodeID, outNodeID):
         self.num = num
@@ -263,6 +269,4 @@ class Synapse:
         self.endNeuron = endNeuron
         self.weight = weight
         self.recurrent = recurrent
-    
-test = Population(10,4,1)
 
