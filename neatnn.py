@@ -9,15 +9,41 @@ def sigmoid(x):
     return 1 / (1+math.exp(-x))
 
 class Population:
-    genomes = []
+    entities = []
     species = []
     innovation = 0
     innovations = []
     
-    def __init__(self, populationSize, numInputs = 0, numOutputs = 0, speciationTreshold = 0.2):
-        self.speciationTreshold = speciationTreshold
+    def __init__(self, populationSize, numInputs = 0, numOutputs = 0, speciationThreshold = 10.0):
+        self.speciationThreshold = speciationThreshold
         for i in range(populationSize):
-            self.genomes.append(Genome(self,numInputs, numOutputs))
+            self.entities.append(Entity(Genome(self,numInputs, numOutputs)))
+
+    def speciateEntities(self):
+        for spec in self.species:
+            spec.reset()
+        for entity in self.entities:
+            placed = False
+            for spec in self.species:
+                if spec.isEntityCompatible(entity, self.speciationThreshold):
+                    spec.addEntity(entity)
+                    placed = True
+                    break
+            if not placed:
+                self.species.append(Species(entity))
+
+    def setSharedFitnesses(self):
+        for entity in self.entities:
+            for spec in self.species:
+                if entity in spec.entities:
+                    entity.sharedFitness = entity.rawFitness/len(spec.entities)
+
+    def sortEntities(self):
+        self.entities.sort(key=lambda x: x.sharedFitness)
+
+    def createNextGeneration(self):
+        for entity in self.entities:
+            entity.genome.mutate(0.03,0.05,0.8)
 
     def addInnovation(self, inNodeID, outNodeID):
         for innov in self.innovations:
@@ -29,17 +55,50 @@ class Population:
 
 class Entity:
 
+    rawFitness = 0
+    sharedFitness=0
+
     def __init__(self, genome):
-        
+        self.genome = genome
+        return
+    def getNN(self):
+        neurons = []
+        for node in self.genome.nodeGenes:
+            neurons.append(Neuron(node.nodeType, node.nodeID))
+        for connection in self.genome.connectionGenes:
+            if connection.expressed:
+                startNeuron = 0
+                endNeuron = 0
+                for neuron in neurons:
+                    if neuron.neuronID==connection.inNode:
+                        startNeuron = neuron
+                    if neuron.neuronID==connection.outNode:
+                        endNeuron = neuron
+                    if startNeuron!=0 and endNeuron!=0:
+                        break
+                syn = Synapse(startNeuron, endNeuron, connection.weight, connection.recurrent)
+                startNeuron.outputSynapses.append(syn)
+                endNeuron.inputSynapses.append(syn)
+        return NeuralNetwork(neurons, self.genome.getDepth())
 
 class Innovation:
     def __init__(self, num, inNodeID, outNodeID):
         self.num = num
         self.inNodeID=inNodeID
         self.outNodeID=outNodeID
+        
 class Species:
+    entities = []
     def __init__(self, rep):
         self.rep = rep
+        self.entities.append(rep)
+    def addEntity(self, entity):
+        self.entities.append(entity)
+    def isEntityCompatible(self, entity, threshold):
+        return self.rep.genome.getDistance(entity.genome) < threshold
+    def reset(self):
+        self.rep = max(self.entities, key=lambda x: x.rawFitness)
+        self.entities = []
 
 class Genome:
     def __init__(self, population, numInputs=0, numOutputs=0):
@@ -124,7 +183,7 @@ class Genome:
         numMatching = 0
         numExcess = 0
         numDisjoint = 0
-        n = len(self.nodeGenes) if len(self.nodeGenes) > len(genome.nodeGenes) else len(genome.nodeGenes)
+        n = max(len(self.nodeGenes),len(genome.nodeGenes))
         weightDifferenceSum=0
         for gene in self.connectionGenes:
             matching = False
@@ -209,28 +268,7 @@ def crossover_genomes(g1,g2,sameFit=False):
             child.connectionGenes.append(copy.deepcopy(connection))
     return child
 
-"""Neural Network"""
-def genomeToNN(genome):
-    neurons = []
-    for node in genome.nodeGenes:
-        neurons.append(Neuron(node.nodeType, node.nodeID))
-    for connection in genome.connectionGenes:
-        if connection.expressed:
-            startNeuron = 0
-            endNeuron = 0
-            for neuron in neurons:
-                if neuron.neuronID==connection.inNode:
-                    startNeuron = neuron
-                if neuron.neuronID==connection.outNode:
-                    endNeuron = neuron
-                if startNeuron!=0 and endNeuron!=0:
-                    break
-            syn = Synapse(startNeuron, endNeuron, connection.weight, connection.recurrent)
-            startNeuron.outputSynapses.append(syn)
-            endNeuron.inputSynapses.append(syn)
-    return NeuralNetwork(neurons, genome.getDepth())
-                    
-
+"""Neural Network"""                  
 class NeuralNetwork:
     def __init__(self, neurons, depth):
         self.neurons = neurons
