@@ -5,6 +5,8 @@ Created by Nicholas Julien
 
 import random, copy, math
 
+"""Sigmoid function used as activation function in the neural network.
+Probably worthwhile to replace math.exp with numpy.exp to prevent out of range errors"""
 def sigmoid(x):
     return 1 / (1+math.exp(-x))
 
@@ -22,6 +24,7 @@ class Population:
     def speciateEntities(self):
         for spec in self.species:
             spec.reset()
+        self.species = [item for item in self.species if not item.extinct]
         for entity in self.entities:
             placed = False
             for spec in self.species:
@@ -31,6 +34,12 @@ class Population:
                     break
             if not placed:
                 self.species.append(Species(entity))
+
+    def findEntitySpecies(self, entity):
+        for species in self.species:
+            if species.isEntityCompatible(entity, self.speciationThreshold):
+                return species
+        return Species(entity)
 
     def setSharedFitnesses(self):
         for entity in self.entities:
@@ -42,8 +51,15 @@ class Population:
         self.entities.sort(key=lambda x: x.sharedFitness)
 
     def createNextGeneration(self):
+        newEntities = []
         for entity in self.entities:
-            entity.genome.mutate(0.03,0.05,0.8)
+            species = self.findEntitySpecies(entity)
+            if entity == species.rep:
+                newEntities.append(entity)
+            else:
+                newEntities.append(Entity(crossover_genomes(self.findEntitySpecies(entity).rep.genome, entity.genome)))
+            newEntities[-1].genome.mutate(0.03,0.05,0.8)
+        self.entities = newEntities
 
     def addInnovation(self, inNodeID, outNodeID):
         for innov in self.innovations:
@@ -88,15 +104,19 @@ class Innovation:
         self.outNodeID=outNodeID
         
 class Species:
-    entities = []
+    extinct = False
     def __init__(self, rep):
         self.rep = rep
+        self.entities = []
         self.entities.append(rep)
     def addEntity(self, entity):
         self.entities.append(entity)
     def isEntityCompatible(self, entity, threshold):
         return self.rep.genome.getDistance(entity.genome) < threshold
     def reset(self):
+        if len(self.entities)==0:
+            self.extinct = True
+            return
         self.rep = max(self.entities, key=lambda x: x.rawFitness)
         self.entities = []
 
@@ -107,10 +127,10 @@ class Genome:
         self.connectionGenes = []
         self.nodeNum = 0
         for i in range(numInputs):
-            self.nodeGenes.append(Node("input",self.nodeNum,0))
+            self.nodeGenes.append(Node("input",self.nodeNum,0.0))
             self.nodeNum+=1
         for i in range(numOutputs):
-            self.nodeGenes.append(Node("output",self.nodeNum,1))
+            self.nodeGenes.append(Node("output",self.nodeNum,1.0))
             self.nodeNum+=1
         for node1 in self.nodeGenes:
             if node1.nodeType == "input":
@@ -157,7 +177,7 @@ class Genome:
             return
         startNode = self.getNodeFromID(connection.inNode)
         endNode = self.getNodeFromID(connection.outNode)
-        newNode = Node("hidden",self.nodeNum,startNode.splitY+endNode.splitY/2)
+        newNode = Node("hidden",self.nodeNum,(startNode.splitY+endNode.splitY)/2.0)
         self.nodeNum+=1
         self.nodeGenes.append(newNode)
         connection.disable()
@@ -308,3 +328,34 @@ class Synapse:
         self.weight = weight
         self.recurrent = recurrent
 
+"""Simple Test implementation"""
+
+import threading
+
+def fitness(outputs):
+    return 1/outputs[0][0]
+
+test = Population(100,3,1,0.2)
+
+def runNNs(pop):
+    threads = []
+    pop.speciateEntities()
+    for entity in pop.entities:
+        threads.append(threading.Thread(target = work, args = [entity]))
+        threads[-1].start()
+    for thread in threads:
+        thread.join()
+    pop.setSharedFitnesses()
+    pop.sortEntities()
+    pop.createNextGeneration()
+
+def work(entity):
+    nn = entity.getNN()
+    outputs = [nn.update([random.choice(range(100)),random.choice(range(100)),1])]
+    entity.rawFitness = fitness(outputs)
+
+for i in range(500):
+    runNNs(test)
+    print(i/5.0,"%")
+test.sortEntities()
+nn = test.entities[0].getNN()
