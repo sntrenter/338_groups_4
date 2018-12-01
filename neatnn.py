@@ -48,7 +48,7 @@ class Population:
                     entity.sharedFitness = entity.rawFitness/len(spec.entities)
 
     def sortEntities(self):
-        self.entities.sort(key=lambda x: x.sharedFitness)
+        self.entities.sort(key=lambda x: x.sharedFitness, reverse=True)
 
     def createNextGeneration(self):
         newEntities = []
@@ -58,7 +58,7 @@ class Population:
                 newEntities.append(entity)
             else:
                 newEntities.append(Entity(crossover_genomes(self.findEntitySpecies(entity).rep.genome, entity.genome)))
-            newEntities[-1].genome.mutate(0.03,0.05,0.8)
+                newEntities[-1].genome.mutate(0.1,0.05,0.8)
         self.entities = newEntities
 
     def addInnovation(self, inNodeID, outNodeID):
@@ -167,8 +167,9 @@ class Genome:
         if random.random() < nodeChance and len(self.connectionGenes)>0:
             self.add_node(random.choice(self.connectionGenes))
         if random.random() < weightChance:
+            delta = random.gauss(0,0.05)
             for connection in self.connectionGenes:
-                self.modify_weight(connection)
+                self.modify_weight(connection,delta)
     def add_connection(self, inNode, outNode):
         innovation = self.population.addInnovation(inNode, outNode)
         self.connectionGenes.append(Connection(inNode, outNode, random.random()*2.0-1.0, True, (self.getNodeFromID(inNode).splitY>self.getNodeFromID(outNode).splitY), self.population.innovation if innovation == -1 else innovation))
@@ -187,11 +188,11 @@ class Genome:
         newToEnd = Connection(newNode.nodeID, endNode.nodeID, connection.weight, True, False, self.population.innovation if innovation == -1 else innovation)
         self.connectionGenes.append(startToNew)
         self.connectionGenes.append(newToEnd)
-    def modify_weight(self, connection):
+    def modify_weight(self, connection, delta):
         if random.random() < 0.1:
             connection.weight = random.random()*2.0-1.0
         else:
-            connection.weight+=random.gauss(0,0.05)
+            connection.weight+=delta
     #Utility Functions
     def getNodeFromID(self, nodeID):
         for node in self.nodeGenes:
@@ -270,7 +271,7 @@ class Node:
     def __str__(self):
         return '%s(%s at %s)' % (self.nodeID, self.nodeType,self.splitY)
 
-def crossover_genomes(g1,g2,sameFit=False):
+def crossover_genomes(g1,g2):
     child = Genome(g1.population)
     child.nodeNum = g1.nodeNum
     child.nodeGenes = copy.deepcopy(g1.nodeGenes)
@@ -284,7 +285,6 @@ def crossover_genomes(g1,g2,sameFit=False):
                 else:
                     child.connectionGenes.append(copy.deepcopy(connection2))
         if not matching:
-            #We can calculate if this is excess or disjoint later
             child.connectionGenes.append(copy.deepcopy(connection))
     return child
 
@@ -306,6 +306,8 @@ class NeuralNetwork:
                    neuron.activate()
                if neuron.neuronType == "output":
                    outputs.append(neuron.value)
+        for neuron in self.neurons:
+            neuron.value=0
         return outputs
         
 class Neuron:
@@ -327,35 +329,3 @@ class Synapse:
         self.endNeuron = endNeuron
         self.weight = weight
         self.recurrent = recurrent
-
-"""Simple Test implementation"""
-
-import threading
-
-def fitness(outputs):
-    return 1/outputs[0][0]
-
-test = Population(100,3,1,0.2)
-
-def runNNs(pop):
-    threads = []
-    pop.speciateEntities()
-    for entity in pop.entities:
-        threads.append(threading.Thread(target = work, args = [entity]))
-        threads[-1].start()
-    for thread in threads:
-        thread.join()
-    pop.setSharedFitnesses()
-    pop.sortEntities()
-    pop.createNextGeneration()
-
-def work(entity):
-    nn = entity.getNN()
-    outputs = [nn.update([random.choice(range(100)),random.choice(range(100)),1])]
-    entity.rawFitness = fitness(outputs)
-
-for i in range(500):
-    runNNs(test)
-    print(i/5.0,"%")
-test.sortEntities()
-nn = test.entities[0].getNN()
