@@ -16,19 +16,22 @@ class Population:
     innovation = 0
     innovations = []
     
-    def __init__(self, populationSize, numInputs = 0, numOutputs = 0, speciationThreshold = 10.0):
+    def __init__(self, populationSize, numInputs = 0, numOutputs = 0, speciationThreshold = 10.0, c1=1,c2=1,c3=1):
         self.speciationThreshold = speciationThreshold
+        self.c1 = c1
+        self.c2 = c2
+        self.c3 = c3
         for i in range(populationSize):
             self.entities.append(Entity(Genome(self,numInputs, numOutputs)))
 
     def speciateEntities(self):
-        for spec in self.species:
-            spec.reset()
+        for species in self.species:
+            species.reset()
         self.species = [item for item in self.species if not item.extinct]
         for entity in self.entities:
             placed = False
             for spec in self.species:
-                if spec.isEntityCompatible(entity, self.speciationThreshold):
+                if spec.isEntityCompatible(entity, self.speciationThreshold, self.c1, self.c2, self.c3):
                     spec.addEntity(entity)
                     placed = True
                     break
@@ -37,7 +40,7 @@ class Population:
 
     def findEntitySpecies(self, entity):
         for species in self.species:
-            if species.isEntityCompatible(entity, self.speciationThreshold):
+            if species.isEntityCompatible(entity, self.speciationThreshold, self.c1, self.c2, self.c3):
                 return species
         return Species(entity)
 
@@ -50,15 +53,25 @@ class Population:
     def sortEntities(self):
         self.entities.sort(key=lambda x: x.sharedFitness, reverse=True)
 
-    def createNextGeneration(self):
-        newEntities = []
+    def fixEntities(self):
         for entity in self.entities:
+            entity.genome.population = self
+
+    def createNextGeneration(self, connection_chance=0.03, node_chance=0.05, weight_chance=0.8):
+        newEntities = []
+        for i in range(int(len(self.entities)/2)):
+            entity = self.entities[i]
             species = self.findEntitySpecies(entity)
             if entity == species.rep:
                 newEntities.append(entity)
+                child = Entity(entity.genome.clone())
+                child.genome.mutate(connection_chance, node_chance, weight_chance)
+                newEntities.append(child)
             else:
-                newEntities.append(Entity(crossover_genomes(self.findEntitySpecies(entity).rep.genome, entity.genome)))
-                newEntities[-1].genome.mutate(0.1,0.05,0.8)
+                newEntities.append(Entity(crossover_genomes(species.rep.genome, entity.genome)))
+                newEntities[-1].genome.mutate(connection_chance, node_chance, weight_chance)
+                newEntities.append(Entity(crossover_genomes(species.rep.genome, entity.genome)))
+                newEntities[-1].genome.mutate(connection_chance, node_chance, weight_chance)
         self.entities = newEntities
 
     def addInnovation(self, inNodeID, outNodeID):
@@ -111,8 +124,8 @@ class Species:
         self.entities.append(rep)
     def addEntity(self, entity):
         self.entities.append(entity)
-    def isEntityCompatible(self, entity, threshold):
-        return self.rep.genome.getDistance(entity.genome) < threshold
+    def isEntityCompatible(self, entity, threshold, c1, c2, c3):
+        return self.rep.genome.getDistance(entity.genome, c1, c2, c3) < threshold
     def reset(self):
         if len(self.entities)==0:
             self.extinct = True
@@ -139,18 +152,19 @@ class Genome:
                         self.add_connection(node1.nodeID, node2.nodeID)
 
     #Testing functions
-    def printOut(self):
+    def __str__(self):
         """print("Nodes:")
         for node in self.nodeGenes:
             print(node)
         for gene in self.connectionGenes:
             print(gene)"""
-        print("====Genome====")
+        ret="===Genome==="
         for node in self.nodeGenes:
-            print(node)
+            ret+="\n"+str(node)
             for connection in self.connectionGenes:
                 if connection.inNode==node.nodeID:
-                    print("  ",connection)
+                    ret+="\n   "+str(connection)
+        return ret
         
             
     #Mutation functions
@@ -164,7 +178,7 @@ class Genome:
                 inNode = tmp
             if outNode.nodeType!="input" and inNode.nodeType!="output" and not self.hasConnection(inNode.nodeID, outNode.nodeID):
                 self.add_connection(inNode.nodeID, outNode.nodeID)
-        if random.random() < nodeChance and len(self.connectionGenes)>0:
+        if random.random() < nodeChance:
             self.add_node(random.choice(self.connectionGenes))
         if random.random() < weightChance:
             delta = random.gauss(0,0.05)
