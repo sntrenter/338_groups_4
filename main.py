@@ -1,6 +1,19 @@
 # Blackjack testing parallel program. Well test 4 AIs playing different strageties over a large number of iterations and track which does best
 import cards
 import multiprocessing as mp
+from threading import Thread
+from queue import Queue
+import time
+
+q = Queue()
+
+myDict = {
+    "rock" : 0,
+    "fish" : 0,
+    "savvy" : 0
+
+
+}
 
 # adds card rank with Black Jack logic resolving Ace as 11 if possible
 def add_cards(hand):
@@ -32,49 +45,53 @@ def check_winner(dealer_hand, player_hand):
         return 0
 
 # rock hardly ever hits
-def player_rock(num_hands, totals):
-    fitness = 0
-    for i in range(num_hands):
-        #set deck
-        deck = cards.Deck()
-        deck.shuffle()
-        #deal cards
-        player_hand = cards.Hand()
-        deck.move_cards(player_hand, 2)
-        dealer_hand = cards.Hand()
-        deck.move_cards(dealer_hand,2)
-        #player logic
-        while add_cards(player_hand) <= 13:
-            deck.move_cards(player_hand, 1)
-        #dealer logic
-        while add_cards(dealer_hand) <= 17:
-            deck.move_cards(dealer_hand, 1)
-        #evaluate fitness
-        fitness += check_winner(dealer_hand, player_hand)
-    totals.put(("rock", fitness))
+def player_rock(num_hands, num_threads, remainder):
+    for i in range((num_hands // num_threads) + remainder):
+        fitness = 0
+        for i in range(num_hands):
+            #set deck
+            deck = cards.Deck()
+            deck.shuffle()
+            #deal cards
+            player_hand = cards.Hand()
+            deck.move_cards(player_hand, 2)
+            dealer_hand = cards.Hand()
+            deck.move_cards(dealer_hand,2)
+            #player logic
+            while add_cards(player_hand) <= 13:
+                deck.move_cards(player_hand, 1)
+            #dealer logic
+            while add_cards(dealer_hand) <= 17:
+                deck.move_cards(dealer_hand, 1)
+            #evaluate fitness
+            fitness += check_winner(dealer_hand, player_hand)
+        value = myDict.get("rock")
+        myDict["rock"] = value + fitness 
 
 # fish hits all the time
-def player_fish(num_hands, totals):
-    fitness = 0
-    while num_hands > 0:
-        #set deck
-        deck = cards.Deck()
-        deck.shuffle()
-        #deal cards
-        player_hand = cards.Hand()
-        deck.move_cards(player_hand, 2)
-        dealer_hand = cards.Hand()
-        deck.move_cards(dealer_hand,2)
-        #player logic
-        while add_cards(player_hand) <= 16:
-            deck.move_cards(player_hand, 1)
-        #dealer logic
-        while add_cards(dealer_hand) <= 17:
-            deck.move_cards(dealer_hand, 1)
-        #evaluate fitness
-        fitness += check_winner(dealer_hand, player_hand)
-        num_hands -= 1
-    totals.put(("fish", fitness))
+def player_fish(num_hands, num_threads, remainder):
+    for i in range((num_hands // num_threads) + remainder):
+        fitness = 0
+        while num_hands > 0:
+            #set deck
+            deck = cards.Deck()
+            deck.shuffle()
+            #deal cards
+            player_hand = cards.Hand()
+            deck.move_cards(player_hand, 2)
+            dealer_hand = cards.Hand()
+            deck.move_cards(dealer_hand,2)
+            #player logic
+            while add_cards(player_hand) <= 16:
+                deck.move_cards(player_hand, 1)
+            #dealer logic
+            while add_cards(dealer_hand) <= 17:
+                deck.move_cards(dealer_hand, 1)
+            #evaluate fitness
+            fitness += check_winner(dealer_hand, player_hand)
+            num_hands -= 1
+        value = myDict.get("fish")
+        myDict["fish"] = value + fitness 
 
 #savvy player helper -- decideds to hit (return 1) or stand (return 0) based on current hand and 1 of dealers cards
 def savvy_decide(player_hand, dealer_hand):
@@ -114,57 +131,59 @@ def savvy_decide(player_hand, dealer_hand):
 	return -1
 
 #savvy plays smart
-def player_savvy(num_hands, totals):
-	fitness = 0
-	while num_hands > 0:
-		#set deck
-		deck = cards.Deck()
-		deck.shuffle()
-        #deal cards
-		player_hand = cards.Hand()
-		deck.move_cards(player_hand, 2)
-		dealer_hand = cards.Hand()
-		deck.move_cards(dealer_hand,2)
-		#player logic
-		while (savvy_decide(player_hand, dealer_hand) > 0):
-			deck.move_cards(player_hand, 1)
-		fitness += check_winner(dealer_hand, player_hand)
-		num_hands -= 1
-	totals.put(("savvy", fitness))
+def player_savvy(num_hands, num_threads, remainder):
+    #num_hands = num_simulations
+    for i in range((num_hands // num_threads) + remainder):
+        fitness = 0
+        while num_hands > 0:
+	    #set deck
+            deck = cards.Deck()
+            deck.shuffle()
+            #deal cards
+            player_hand = cards.Hand()
+            deck.move_cards(player_hand, 2)
+            dealer_hand = cards.Hand()
+            deck.move_cards(dealer_hand,2)
+	    #player logic
+            while (savvy_decide(player_hand, dealer_hand) > 0):
+                deck.move_cards(player_hand, 1)
+            fitness += check_winner(dealer_hand, player_hand)
+            num_hands -= 1
+        value = myDict.get("savvy")
+        myDict["savvy"] = value + fitness 
     
 """
 def player_genetic():
     #add genetic player
 """
 def main():
-	totals = mp.Queue() #holds total fitness of tests in key-number pairs
-	num_hands = 10000 #hard-coded -- consider switching to user imput
-	players = []
-    
-    
-	p = mp.Process(target = player_rock, args = [num_hands, totals])
-	players.append(p)
-    
-	p = mp.Process(target = player_fish, args = [num_hands, totals])
-	players.append(p)
-	
-	p = mp.Process(target = player_savvy, args = [num_hands, totals])
-	players.append(p)
+    num_hands = 500 #hard-coded -- consider switching to user imput
+    players = []
+    num_threads = 10
+    remainder = 0
+    for i in range(num_threads):
+        if i == num_threads - 1:
+            remainder = num_hands % num_threads
+        result = Thread(target=player_rock, args=[num_hands, num_threads, remainder])
+        result.start()
+        players.append(result)
+            
+        result = Thread(target=player_fish, args=[num_hands, num_threads, remainder])
+        result.start()
+        players.append(result)
+            
+        result = Thread(target=player_savvy, args=[num_hands, num_threads, remainder])
+        result.start()
+        players.append(result)
+            
+    for result in players:
+        result.join()
+        
+    print(myDict)    
 
-	"""
-	p = mp.Process(target = player_genetic())
-	players.append(p)
-	"""
-	for p in players:
-		p.start()
-	for p in players:
-		p.join()
-
-	results = []
-	while not totals.empty() > 0:
-		results.append(totals.get())
-	for r in results:
-		print(r)
     
-if __name__ == "__main__":  
+if __name__ == "__main__":
+    start = time.time()
     main()
+    overall_time = time.time()- start
+    print("Elapsed time: {}".format(overall_time))
