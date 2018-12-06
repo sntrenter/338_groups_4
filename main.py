@@ -157,7 +157,8 @@ def player_genetic():
     #add genetic player
 """
 def main():
-    num_hands = 500 #hard-coded -- consider switching to user imput
+    user_input = input(" How many hands do you want to play: ")
+    num_hands = int(user_input)
     players = []
     num_threads = 10
     remainder = 0
