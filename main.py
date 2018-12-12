@@ -2,6 +2,7 @@
 import cards
 import neatnn as nn
 import multiprocessing as mp
+import time
 
 # adds card rank with Black Jack logic resolving Ace as 11 if possible
 def add_cards(hand):
@@ -182,7 +183,8 @@ def player_genetic(entities, num_hands, totals, training=True):
 def main():
         
     totals = mp.Queue() #holds total fitness of tests in key-number pairs
-    num_hands = 10000 #hard-coded -- consider switching to user imput
+    user_input = input(" How many hands do you want to play: ")
+    num_hands = int(user_input) #hard-coded -- consider switching to user imput
     players = []
     
     num_training_hands = 800 # The number of games to play in each training generation
@@ -215,7 +217,7 @@ def main():
         if(i<num_generations-1):
             genetic_population.createNextGeneration(0.03,0.05,0.8)
     print("Training complete. Running test.")
-
+    start = time.time()
     best_genetic = max(genetic_population.entities, key = lambda x: x.rawFitness)
     
     p = mp.Process(target = player_rock, args = [num_hands, totals])
@@ -241,6 +243,8 @@ def main():
     results.sort(key = lambda x: x[1], reverse = True)
     for r in results:
         print(r)
+    overall_time = time.time() - start
+    print("Elapsed time: {}".format(overall_time))
     
 if __name__ == "__main__":  
     main()
