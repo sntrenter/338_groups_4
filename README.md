@@ -1,2 +1,2 @@
 # 338_groups_4
-no
+NEAT blackjack machine
